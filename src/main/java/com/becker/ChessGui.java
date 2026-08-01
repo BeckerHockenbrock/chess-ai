@@ -36,8 +36,6 @@ public class ChessGui {
     private List<int[]> highlightedMoves = new ArrayList<>();
     private int selectedRow = -1;
     private int selectedCol = -1;
-    private int currentTurn = Piece.WHITE;
-
     @FXML
     private void initialize() {
         drawBoard();
@@ -51,7 +49,7 @@ public class ChessGui {
 
         String who;
         String opponent;
-        if (currentTurn == Piece.WHITE) {
+        if (board.getCurrentTurn() == Piece.WHITE) {
             who = "White";
             opponent = "Black";
         } else {
@@ -59,11 +57,11 @@ public class ChessGui {
             opponent = "White";
         }
 
-        if (board.isCheckmate(currentTurn)) {
+        if (board.isCheckmate(board.getCurrentTurn())) {
             statusLabel.setText("Checkmate! " + opponent + " wins");
-        } else if (board.isStalemate(currentTurn)) {
+        } else if (board.isStalemate(board.getCurrentTurn())) {
             statusLabel.setText("Stalemate! Draw");
-        } else if (board.isInCheck(currentTurn)) {
+        } else if (board.isInCheck(board.getCurrentTurn())) {
             statusLabel.setText(who + " is in check");
         } else {
             statusLabel.setText(who + "'s turn");
@@ -126,18 +124,13 @@ public class ChessGui {
             selectedRow = -1;
             selectedCol = -1;
             highlightedMoves = new ArrayList<>();
-            if (currentTurn == Piece.WHITE) {
-                currentTurn = Piece.BLACK;
-            } else {
-                currentTurn = Piece.WHITE;
-            }
             drawBoard();
             updateStatus();
             return;
         }
 
         Piece piece = board.getPiece(row, col);
-        if (piece != null && piece.getColor() == currentTurn) {
+        if (piece != null && piece.getColor() == board.getCurrentTurn()) {
             List<int[]> moves = board.getLegalMoves(row, col);
             if (moves != null) {
                 highlightedMoves = moves;

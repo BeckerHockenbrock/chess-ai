@@ -9,10 +9,24 @@ public class Board {
 
     private Piece[][] grid;
     private int[] enPassantTarget;
+    private int currentTurn;
+    private int halfmoveClock;
+    private int fullmoveNumber;
+    private boolean whiteCanCastleKingside;
+    private boolean whiteCanCastleQueenside;
+    private boolean blackCanCastleKingside;
+    private boolean blackCanCastleQueenside;
 
     public Board() {
         grid = new Piece[8][8];
         placePeices();
+        currentTurn = Piece.WHITE;
+        halfmoveClock = 0;
+        fullmoveNumber = 1;
+        whiteCanCastleKingside = true;
+        whiteCanCastleQueenside = true;
+        blackCanCastleKingside = true;
+        blackCanCastleQueenside = true;
     }
 
     private void placePeices() {
@@ -52,13 +66,17 @@ public class Board {
 
     public void movePiece(int fromRow, int fromCol, int toRow, int toCol) {
         Piece moving = grid[fromRow][fromCol];
+        boolean enPassant = isEnPassant(fromRow, fromCol, toRow, toCol);
+        Piece captured = enPassant ? grid[fromRow][toCol] : grid[toRow][toCol];
 
-        if (isEnPassant(fromRow, fromCol, toRow, toCol)) {
+        if (enPassant) {
             grid[fromRow][toCol] = null;
         }
 
         grid[toRow][toCol] = moving;
         grid[fromRow][fromCol] = null;
+
+        updateCastlingRights(moving, captured, fromRow, fromCol, toRow, toCol);
 
         if (moving instanceof Pawn && Math.abs(toRow - fromRow) == 2) {
             enPassantTarget = new int[]{(fromRow + toRow) / 2, fromCol};
@@ -66,11 +84,7 @@ public class Board {
             enPassantTarget = null;
         }
 
-        if (moving instanceof King) {
-            ((King) moving).setMoved();
-        } else if (moving instanceof Rook) {
-            ((Rook) moving).setMoved();
-        }
+        updateMoveCounters(moving, captured);
     }
 
     public boolean isEnPassant(int fromRow, int fromCol, int toRow, int toCol) {
@@ -87,16 +101,119 @@ public class Board {
     }
 
     public void castle(int fromRow, int fromCol, int toRow, int toCol) {
-        movePiece(fromRow, fromCol, toRow, toCol);
+        Piece king = grid[fromRow][fromCol];
+        Piece rook;
+        int rookFromCol;
+        int rookToCol;
         if (toCol > fromCol) {
-            movePiece(fromRow, 7, fromRow, 5);
+            rookFromCol = 7;
+            rookToCol = 5;
         } else {
-            movePiece(fromRow, 0, fromRow, 3);
+            rookFromCol = 0;
+            rookToCol = 3;
         }
+        rook = grid[fromRow][rookFromCol];
+
+        grid[toRow][toCol] = king;
+        grid[fromRow][fromCol] = null;
+        grid[fromRow][rookToCol] = rook;
+        grid[fromRow][rookFromCol] = null;
+
+        updateCastlingRights(king, null, fromRow, fromCol, toRow, toCol);
+        if (rook instanceof Rook) {
+            ((Rook) rook).setMoved();
+        }
+        enPassantTarget = null;
+        updateMoveCounters(king, null);
     }
 
     public Piece[][] getGrid() {
         return grid;
+    }
+
+    public int getCurrentTurn() {
+        return currentTurn;
+    }
+
+    public int getHalfmoveClock() {
+        return halfmoveClock;
+    }
+
+    public int getFullmoveNumber() {
+        return fullmoveNumber;
+    }
+
+    public int[] getEnPassantTarget() {
+        if (enPassantTarget == null) {
+            return null;
+        }
+        return new int[]{enPassantTarget[0], enPassantTarget[1]};
+    }
+
+    public String getCastlingRights() {
+        StringBuilder rights = new StringBuilder();
+        if (whiteCanCastleKingside) {
+            rights.append('K');
+        }
+        if (whiteCanCastleQueenside) {
+            rights.append('Q');
+        }
+        if (blackCanCastleKingside) {
+            rights.append('k');
+        }
+        if (blackCanCastleQueenside) {
+            rights.append('q');
+        }
+        return rights.length() == 0 ? "-" : rights.toString();
+    }
+
+    private void updateCastlingRights(Piece moving, Piece captured, int fromRow, int fromCol, int toRow, int toCol) {
+        if (moving instanceof King) {
+            if (moving.getColor() == Piece.WHITE) {
+                whiteCanCastleKingside = false;
+                whiteCanCastleQueenside = false;
+            } else {
+                blackCanCastleKingside = false;
+                blackCanCastleQueenside = false;
+            }
+            ((King) moving).setMoved();
+        } else if (moving instanceof Rook) {
+            disableRookCastlingRight(moving.getColor(), fromRow, fromCol);
+            ((Rook) moving).setMoved();
+        }
+
+        if (captured instanceof Rook) {
+            disableRookCastlingRight(captured.getColor(), toRow, toCol);
+        }
+    }
+
+    private void disableRookCastlingRight(int color, int row, int col) {
+        if (color == Piece.WHITE && row == 7) {
+            if (col == 0) {
+                whiteCanCastleQueenside = false;
+            } else if (col == 7) {
+                whiteCanCastleKingside = false;
+            }
+        } else if (color == Piece.BLACK && row == 0) {
+            if (col == 0) {
+                blackCanCastleQueenside = false;
+            } else if (col == 7) {
+                blackCanCastleKingside = false;
+            }
+        }
+    }
+
+    private void updateMoveCounters(Piece moving, Piece captured) {
+        if (moving instanceof Pawn || captured != null) {
+            halfmoveClock = 0;
+        } else {
+            halfmoveClock++;
+        }
+
+        if (currentTurn == Piece.BLACK) {
+            fullmoveNumber++;
+        }
+        currentTurn = currentTurn == Piece.WHITE ? Piece.BLACK : Piece.WHITE;
     }
 
     public int[] findKing(int color) {

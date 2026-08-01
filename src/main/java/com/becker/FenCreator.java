@@ -4,12 +4,8 @@ import com.becker.pieces.*;
 
 public class FenCreator {
 
-    public FenCreator(Board board) {
-        makeFenString(board);
-    }
-
     public String makeFenString(Board board) {
-        String fen = "";
+        StringBuilder fen = new StringBuilder();
         for (int row = 0; row < 8; row++) {
             int emptyCount = 0;
             for (int col = 0; col < 8; col++) {
@@ -18,7 +14,7 @@ public class FenCreator {
                     emptyCount++;
                 } else {
                     if (emptyCount > 0) {
-                        fen += emptyCount;
+                        fen.append(emptyCount);
                         emptyCount = 0;
                     }
                     
@@ -26,17 +22,37 @@ public class FenCreator {
                     if (piece.getColor() == Piece.WHITE) {
                         c = c.toUpperCase();
                     }
-                    fen += c;
+                    fen.append(c);
                 }
             }
             if (emptyCount > 0) {
-                fen += emptyCount;
+                fen.append(emptyCount);
             }
             if (row < 7) {
-                fen += "/";
+                fen.append('/');
             }
         }
-        return fen;
+        fen.append(' ')
+                .append(board.getCurrentTurn() == Piece.WHITE ? 'w' : 'b')
+                .append(' ')
+                .append(board.getCastlingRights())
+                .append(' ')
+                .append(getEnPassantSquare(board))
+                .append(' ')
+                .append(board.getHalfmoveClock())
+                .append(' ')
+                .append(board.getFullmoveNumber());
+        return fen.toString();
+    }
+
+    private String getEnPassantSquare(Board board) {
+        int[] target = board.getEnPassantTarget();
+        if (target == null) {
+            return "-";
+        }
+        char file = (char) ('a' + target[1]);
+        int rank = 8 - target[0];
+        return "" + file + rank;
     }
 
     private String getPieceStr(Piece piece) {
@@ -58,7 +74,7 @@ public class FenCreator {
         if (piece instanceof King) {
             return "k";
         }
-        return "?";
+        throw new IllegalArgumentException("Unsupported piece type: " + piece.getClass().getName());
     }
 
 }
