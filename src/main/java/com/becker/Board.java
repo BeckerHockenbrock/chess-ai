@@ -127,6 +127,73 @@ public class Board {
         updateMoveCounters(king, null);
     }
 
+    public boolean makeUciMove(String move) {
+        if (move == null || (move.length() != 4 && move.length() != 5)) {
+            return false;
+        }
+
+        int fromCol = move.charAt(0) - 'a';
+        int fromRow = 8 - Character.getNumericValue(move.charAt(1));
+        int toCol = move.charAt(2) - 'a';
+        int toRow = 8 - Character.getNumericValue(move.charAt(3));
+
+        if (fromRow < 0 || fromRow > 7 || fromCol < 0 || fromCol > 7
+                || toRow < 0 || toRow > 7 || toCol < 0 || toCol > 7) {
+            return false;
+        }
+
+        Piece moving = grid[fromRow][fromCol];
+        if (moving == null || moving.getColor() != currentTurn || !isLegalMove(fromRow, fromCol, toRow, toCol)) {
+            return false;
+        }
+
+        Piece promotedPiece = null;
+        if (moving instanceof Pawn && (toRow == 0 || toRow == 7)) {
+            if (move.length() != 5) {
+                return false;
+            }
+            promotedPiece = getPromotionPiece(moving.getColor(), move.charAt(4));
+            if (promotedPiece == null) {
+                return false;
+            }
+        }
+
+        if (isCastle(fromRow, fromCol, toRow, toCol)) {
+            castle(fromRow, fromCol, toRow, toCol);
+        } else {
+            movePiece(fromRow, fromCol, toRow, toCol);
+        }
+
+        if (promotedPiece != null) {
+            setPiece(toRow, toCol, promotedPiece);
+        }
+        return true;
+    }
+
+    private boolean isLegalMove(int fromRow, int fromCol, int toRow, int toCol) {
+        for (int[] move : getLegalMoves(fromRow, fromCol)) {
+            if (move[0] == toRow && move[1] == toCol) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private Piece getPromotionPiece(int color, char promotion) {
+        switch (Character.toLowerCase(promotion)) {
+            case 'q':
+                return new Queen(color);
+            case 'r':
+                return new Rook(color);
+            case 'b':
+                return new Bishop(color);
+            case 'n':
+                return new Knight(color);
+            default:
+                return null;
+        }
+    }
+
     public Piece[][] getGrid() {
         return grid;
     }

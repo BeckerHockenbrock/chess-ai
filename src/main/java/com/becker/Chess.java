@@ -11,11 +11,15 @@ import javafx.stage.Stage;
 public class Chess extends Application {
 
     private static Scene scene;
+    private ChessGui controller;
 
     @Override
     public void start(Stage stage) throws IOException {
-        scene = new Scene(loadFXML("ChessGui"));
+        FXMLLoader loader = new FXMLLoader(Chess.class.getResource("ChessGui.fxml"));
+        scene = new Scene(loader.load());
+        controller = loader.getController();
         stage.setScene(scene);
+        stage.setOnCloseRequest(event -> controller.closeStockfish());
         stage.sizeToScene();
         stage.show();
     }

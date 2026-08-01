@@ -47,12 +47,36 @@ public class FenCreator {
 
     private String getEnPassantSquare(Board board) {
         int[] target = board.getEnPassantTarget();
-        if (target == null) {
+        if (target == null || !canCaptureEnPassant(board, target)) {
             return "-";
         }
         char file = (char) ('a' + target[1]);
         int rank = 8 - target[0];
         return "" + file + rank;
+    }
+
+    private boolean canCaptureEnPassant(Board board, int[] target) {
+        int pawnRow;
+        if (board.getCurrentTurn() == Piece.WHITE) {
+            pawnRow = target[0] + 1;
+        } else {
+            pawnRow = target[0] - 1;
+        }
+
+        for (int col = target[1] - 1; col <= target[1] + 1; col += 2) {
+            if (pawnRow < 0 || pawnRow > 7 || col < 0 || col > 7) {
+                continue;
+            }
+            Piece piece = board.getPiece(pawnRow, col);
+            if (piece instanceof Pawn && piece.getColor() == board.getCurrentTurn()) {
+                for (int[] move : board.getLegalMoves(pawnRow, col)) {
+                    if (move[0] == target[0] && move[1] == target[1]) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     private String getPieceStr(Piece piece) {

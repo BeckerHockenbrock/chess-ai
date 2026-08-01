@@ -1,6 +1,7 @@
 package com.becker;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
@@ -17,11 +18,23 @@ class FenCreatorTest {
     }
 
     @Test
-    void recordsEnPassantTargetAndSideToMoveAfterDoublePawnAdvance() {
+    void omitsAnEnPassantTargetThatStockfishCannotUse() {
         Board board = new Board();
         board.movePiece(6, 4, 4, 4); // e2-e4
 
-        assertEquals("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+        assertEquals("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+                fenCreator.makeFenString(board));
+    }
+
+    @Test
+    void recordsAnEnPassantTargetWhenItCanBeCaptured() {
+        Board board = new Board();
+        board.movePiece(6, 4, 4, 4); // e2-e4
+        board.movePiece(1, 0, 2, 0); // a7-a6
+        board.movePiece(4, 4, 3, 4); // e4-e5
+        board.movePiece(1, 3, 3, 3); // d7-d5
+
+        assertEquals("rnbqkbnr/1pp1pppp/p7/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 3",
                 fenCreator.makeFenString(board));
     }
 
@@ -48,5 +61,14 @@ class FenCreatorTest {
 
         assertEquals("kq", board.getCastlingRights());
         assertEquals("b", fenCreator.makeFenString(board).split(" ")[1]);
+    }
+
+    @Test
+    void appliesAStockfishStyleUciMove() {
+        Board board = new Board();
+
+        assertTrue(board.makeUciMove("e2e4"));
+        assertEquals("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+                fenCreator.makeFenString(board));
     }
 }

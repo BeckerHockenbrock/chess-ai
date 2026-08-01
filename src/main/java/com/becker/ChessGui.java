@@ -11,6 +11,7 @@ import com.becker.pieces.Queen;
 import com.becker.pieces.Rook;
 
 import javafx.fxml.FXML;
+import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
@@ -31,11 +32,17 @@ public class ChessGui {
     private GridPane boardGrid;
     @FXML
     private Label statusLabel;
+    @FXML
+    private Button stockfishButton;
 
     private Board board = new Board();
     private List<int[]> highlightedMoves = new ArrayList<>();
     private int selectedRow = -1;
     private int selectedCol = -1;
+    private Stockfish stockfish;
+    private boolean playingStockfish;
+    private boolean startingStockfish;
+    private boolean stockfishThinking;
     @FXML
     private void initialize() {
         drawBoard();
@@ -111,6 +118,10 @@ public class ChessGui {
     }
 
     private void handleClick(int row, int col) {
+        if (playingStockfish && (board.getCurrentTurn() == Piece.BLACK || stockfishThinking)) {
+            return;
+        }
+
         if (selectedRow != -1 && isHighlighted(row, col)) {
             Piece moving = board.getPiece(selectedRow, selectedCol);
             if (board.isCastle(selectedRow, selectedCol, row, col)) {
@@ -126,6 +137,9 @@ public class ChessGui {
             highlightedMoves = new ArrayList<>();
             drawBoard();
             updateStatus();
+            if (playingStockfish && board.getCurrentTurn() == Piece.BLACK && !gameIsOver()) {
+                makeStockfishMove();
+            }
             return;
         }
 
@@ -145,6 +159,123 @@ public class ChessGui {
             selectedCol = -1;
         }
         drawBoard();
+    }
+
+    @FXML
+    private void toggleStockfish() {
+        if (playingStockfish) {
+            closeStockfish();
+            updateStatus();
+        } else if (!startingStockfish) {
+            startStockfish();
+        }
+    }
+
+    private void startStockfish() {
+        startingStockfish = true;
+        stockfishButton.setDisable(true);
+        statusLabel.setText("Starting Stockfish...");
+
+        Task<Stockfish> task = new Task<>() {
+            @Override
+            protected Stockfish call() throws Exception {
+                Stockfish engine = new Stockfish();
+                try {
+                    engine.start();
+                    return engine;
+                } catch (Exception exception) {
+                    engine.close();
+                    throw exception;
+                }
+            }
+        };
+
+        task.setOnSucceeded(event -> {
+            stockfish = task.getValue();
+            playingStockfish = true;
+            startingStockfish = false;
+            stockfishButton.setDisable(false);
+            stockfishButton.setText("Stop Stockfish");
+            updateStatus();
+            if (board.getCurrentTurn() == Piece.BLACK && !gameIsOver()) {
+                makeStockfishMove();
+            }
+        });
+
+        task.setOnFailed(event -> {
+            startingStockfish = false;
+            stockfishButton.setDisable(false);
+            stockfishButton.setText("Play Stockfish");
+            statusLabel.setText("Could not start Stockfish. Put it on PATH or set STOCKFISH_PATH.");
+        });
+
+        Thread thread = new Thread(task);
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    private void makeStockfishMove() {
+        if (stockfish == null || stockfishThinking || board.getCurrentTurn() != Piece.BLACK) {
+            return;
+        }
+
+        stockfishThinking = true;
+        statusLabel.setText("Stockfish is thinking...");
+        String fen = new FenCreator().makeFenString(board);
+
+        Task<String> task = new Task<>() {
+            @Override
+            protected String call() throws Exception {
+                return stockfish.getBestMove(fen);
+            }
+        };
+
+        task.setOnSucceeded(event -> {
+            stockfishThinking = false;
+            if (!playingStockfish) {
+                return;
+            }
+
+            String move = task.getValue();
+            if (!"(none)".equals(move)) {
+                if (board.makeUciMove(move)) {
+                    drawBoard();
+                } else {
+                    statusLabel.setText("Stockfish sent an invalid move.");
+                    return;
+                }
+            }
+            updateStatus();
+        });
+
+        task.setOnFailed(event -> {
+            stockfishThinking = false;
+            if (playingStockfish) {
+                statusLabel.setText("Stockfish could not make a move.");
+            }
+        });
+
+        Thread thread = new Thread(task);
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    private boolean gameIsOver() {
+        return board.isCheckmate(board.getCurrentTurn()) || board.isStalemate(board.getCurrentTurn());
+    }
+
+    public void closeStockfish() {
+        playingStockfish = false;
+        startingStockfish = false;
+        stockfishThinking = false;
+        if (stockfish != null) {
+            stockfish.close();
+            stockfish = null;
+        }
+        if (stockfishButton != null) {
+            stockfishButton.setDisable(false);
+            stockfishButton.setText("Play Stockfish");
+        }
     }
 
     private Piece choosePromotion(int color) {
