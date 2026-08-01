@@ -1,0 +1,13 @@
+# Build output
+target/
+
+# OS files
+.DS_Store
+
+# IDE configuration
+.idea/
+*.iml
+.vscode/
+
+# Stockfish source and binaries
+src/main/stockfish/
