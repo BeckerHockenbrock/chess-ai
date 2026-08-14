@@ -11,3 +11,5 @@ target/
 
 # Stockfish source and binaries
 src/main/stockfish/
+
+.venv
