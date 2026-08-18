@@ -1,0 +1,2 @@
+# The chess trainer uses PyTorch tensors directly. NumPy is intentionally not required.
+torch==2.8.0

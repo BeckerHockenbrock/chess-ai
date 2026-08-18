@@ -13,3 +13,9 @@ target/
 src/main/stockfish/
 
 .venv
+
+# Generated training data
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/*.pt

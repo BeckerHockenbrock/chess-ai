@@ -1,0 +1,13 @@
+{
+  "input": "float32 [batch, 18, 8, 8]",
+  "input_planes": [
+    "white pawn", "white knight", "white bishop", "white rook", "white queen", "white king",
+    "black pawn", "black knight", "black bishop", "black rook", "black queen", "black king",
+    "white to move", "white kingside castling", "white queenside castling",
+    "black kingside castling", "black queenside castling", "en-passant target"
+  ],
+  "board_rows": "rank 8 to rank 1",
+  "policy": "4672 logits: 64 origin squares times 73 move types",
+  "value": "tanh-normalized Stockfish score, positive for White",
+  "legality": "The Java Board remains the authority. Mask policy logits with legal UCI moves before selecting a move."
+}

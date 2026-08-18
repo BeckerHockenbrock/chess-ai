@@ -11,7 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class Stockfish {
+public class Stockfish implements AutoCloseable {
 
     private final String path;
     private Process process;
@@ -94,6 +94,7 @@ public class Stockfish {
         return analyses;
     }
 
+    @Override
     public void close() {
         try {
             if (writer != null) {
