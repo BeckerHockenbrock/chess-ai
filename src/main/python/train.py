@@ -12,6 +12,9 @@ from chess_model import ChessNet
 
 
 def get_device():
+    if torch.cuda.is_available():
+        # ROCm exposes AMD GPUs through PyTorch's CUDA-compatible API.
+        return torch.device("cuda")
     if torch.backends.mps.is_available():
         return torch.device("mps")
     return torch.device("cpu")
@@ -28,11 +31,12 @@ def run_epoch(model, loader, optimizer, device):
     training = optimizer is not None
     model.train(training)
     total_loss = 0.0
+    use_non_blocking_transfers = device.type == "cuda"
     for batch in loader:
-        board = batch["board"].to(device)
-        legal_mask = batch["legal_mask"].to(device)
-        policy_target = batch["policy"].to(device)
-        value_target = batch["value"].to(device)
+        board = batch["board"].to(device, non_blocking=use_non_blocking_transfers)
+        legal_mask = batch["legal_mask"].to(device, non_blocking=use_non_blocking_transfers)
+        policy_target = batch["policy"].to(device, non_blocking=use_non_blocking_transfers)
+        value_target = batch["value"].to(device, non_blocking=use_non_blocking_transfers)
 
         with torch.set_grad_enabled(training):
             policy_logits, value_prediction = model(board)
@@ -51,7 +55,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--database", default="data/training.db")
     parser.add_argument("--epochs", type=int, default=20)
-    parser.add_argument("--batch-size", type=int, default=64)
+    parser.add_argument("--batch-size", type=int, default=512)
     parser.add_argument("--patience", type=int, default=3,
                         help="Stop after this many validation losses without improvement.")
     parser.add_argument("--output", default="data/chess_model.pt")
@@ -61,8 +65,9 @@ def main():
     device = get_device()
     train_data = ChessDataset(args.database, "train")
     validation_data = ChessDataset(args.database, "validation")
-    train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, num_workers=0)
-    validation_loader = DataLoader(validation_data, batch_size=args.batch_size, num_workers=0)
+    loader_options = {"num_workers": 0, "pin_memory": device.type == "cuda"}
+    train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, **loader_options)
+    validation_loader = DataLoader(validation_data, batch_size=args.batch_size, **loader_options)
     model = ChessNet().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 

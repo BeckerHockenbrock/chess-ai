@@ -1,2 +1,4 @@
-# The chess trainer uses PyTorch tensors directly. NumPy is intentionally not required.
-torch==2.8.0
+# Windows / AMD Radeon GPU build from AMD's ROCm package index. The project uses
+# PyTorch tensors directly; NumPy is intentionally not required.
+--index-url https://repo.amd.com/rocm/whl-multi-arch/
+torch[device-all]==2.12.0+rocm7.14.0
