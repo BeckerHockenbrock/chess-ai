@@ -181,31 +181,7 @@ public class DataCollector {
     }
 
     private static List<String> getLegalMoves(Board board) {
-        List<String> moves = new ArrayList<>();
-        for (int row = 0; row < 8; row++) {
-            for (int col = 0; col < 8; col++) {
-                Piece piece = board.getPiece(row, col);
-                if (piece == null || piece.getColor() != board.getCurrentTurn()) {
-                    continue;
-                }
-                for (int[] destination : board.getLegalMoves(row, col)) {
-                    String move = square(row, col) + square(destination[0], destination[1]);
-                    if (piece instanceof Pawn && (destination[0] == 0 || destination[0] == 7)) {
-                        moves.add(move + "q");
-                        moves.add(move + "r");
-                        moves.add(move + "b");
-                        moves.add(move + "n");
-                    } else {
-                        moves.add(move);
-                    }
-                }
-            }
-        }
-        return moves;
-    }
-
-    private static String square(int row, int col) {
-        return "" + (char) ('a' + col) + (8 - row);
+        return board.getAllLegalMovesUci();
     }
 
     private static long insertGame(Connection connection, String initialFen, String split,

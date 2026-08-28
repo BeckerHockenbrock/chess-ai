@@ -21,7 +21,12 @@ public class Stockfish implements AutoCloseable {
     public Stockfish() {
         String stockfishPath = System.getenv("STOCKFISH_PATH");
         if (stockfishPath == null || stockfishPath.isBlank()) {
-            stockfishPath = "stockfish";
+            java.nio.file.Path bundledPath = java.nio.file.Path.of("src", "main", "stockfish", "stockfish-macos-m1-apple-silicon");
+            if (java.nio.file.Files.isExecutable(bundledPath)) {
+                stockfishPath = bundledPath.toString();
+            } else {
+                stockfishPath = "stockfish";
+            }
         }
         path = stockfishPath;
     }

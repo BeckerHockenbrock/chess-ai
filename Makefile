@@ -1,6 +1,6 @@
 all: build run
 
-.PHONY: all build run clean gather validate-data test-python train
+.PHONY: all build run clean gather validate-data test-python test train
 
 GATHER_COUNT := $(word 2,$(MAKECMDGOALS))
 GATHER_EXTRA := $(wordlist 3,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
@@ -38,9 +38,12 @@ validate-data:
 test-python:
 	@PYTHONPATH=src/main/python .venv/bin/python -m unittest discover -s src/test/python -v
 
+test: test-python
+	mvn test
+
 train:
 	@PYTHONPATH=src/main/python .venv/bin/python src/main/python/train.py \
 		--database "$(DATABASE)" --output "$(MODEL)"
 
-$(filter-out all build run clean gather validate-data test-python train,$(MAKECMDGOALS)):
+$(filter-out all build run clean gather validate-data test-python test train,$(MAKECMDGOALS)):
 	@:
