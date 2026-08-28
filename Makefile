@@ -9,6 +9,7 @@ MODEL ?= data/chess_model.pt
 DEPTH ?= 4
 MIN_OPENING_PLIES ?= 4
 MAX_OPENING_PLIES ?= 8
+THREADS ?= $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
 
 build:
 	mvn compile
@@ -20,8 +21,8 @@ clean:
 	mvn clean
 
 gather:
-	@if [ -z "$(GATHER_COUNT)" ] || [ -n "$(GATHER_EXTRA)" ]; then \
-		echo "Usage: make gather 100 DATABASE=data/training-depth8.db DEPTH=8 MIN_OPENING_PLIES=8 MAX_OPENING_PLIES=20"; \
+	@if [ -z "$(GATHER_COUNT)" ]; then \
+		echo "Usage: make gather 100 DATABASE=data/training-depth8.db DEPTH=8 MIN_OPENING_PLIES=8 MAX_OPENING_PLIES=20 THREADS=8"; \
 		exit 2; \
 	fi
 	@case "$(GATHER_COUNT)" in \
@@ -29,7 +30,7 @@ gather:
 	esac
 	@TRAINING_DATABASE_PATH="$(DATABASE)" mvn -q compile exec:java \
 		-Dexec.mainClass=com.becker.DataCollector \
-		-Dexec.args="$(GATHER_COUNT) $(DEPTH) $(MIN_OPENING_PLIES) $(MAX_OPENING_PLIES)"
+		-Dexec.args="$(GATHER_COUNT) $(DEPTH) $(MIN_OPENING_PLIES) $(MAX_OPENING_PLIES) $(THREADS)"
 
 validate-data:
 	@TRAINING_DATABASE_PATH="$(DATABASE)" mvn -q compile exec:java \

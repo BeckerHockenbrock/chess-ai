@@ -1,6 +1,5 @@
 package com.becker;
 
-import com.becker.pieces.Pawn;
 import com.becker.pieces.Piece;
 
 import java.io.IOException;
@@ -15,6 +14,10 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class DataCollector {
 
@@ -31,12 +34,19 @@ public class DataCollector {
             Files.createDirectories(databasePath.getParent());
         }
 
-        try (Connection connection = TrainingDatabase.open(databasePath.toString());
-             Stockfish stockfish = startStockfish()) {
-            int gathered = gatherPositions(connection, stockfish, settings);
-            System.out.println("Gathered " + gathered + " positions in " + databasePath
-                    + " at depth " + settings.searchDepth + " with random opening plies "
-                    + settings.minOpeningPlies + "-" + settings.maxOpeningPlies + ".");
+        try (Connection connection = TrainingDatabase.open(databasePath.toString())) {
+            long startTime = System.currentTimeMillis();
+            System.out.printf("Starting data collection: target=%d positions, depth=%d, workers=%d%n",
+                    settings.count, settings.searchDepth, settings.threads);
+
+            int gathered = gatherPositionsParallel(connection, settings);
+
+            long elapsed = System.currentTimeMillis() - startTime;
+            double seconds = elapsed / 1000.0;
+            double positionsPerSec = gathered / Math.max(0.001, seconds);
+
+            System.out.printf("Done! Gathered %d positions in %s at depth %d in %.2fs (%.1f pos/sec) using %d workers.%n",
+                    gathered, databasePath, settings.searchDepth, seconds, positionsPerSec, settings.threads);
         }
     }
 
@@ -49,9 +59,9 @@ public class DataCollector {
     }
 
     static CollectionSettings readSettings(String[] args) {
-        if (args.length != 4) {
+        if (args.length < 4 || args.length > 5) {
             throw new IllegalArgumentException("Usage: make gather 100 DEPTH=8 "
-                    + "MIN_OPENING_PLIES=8 MAX_OPENING_PLIES=20");
+                    + "MIN_OPENING_PLIES=8 MAX_OPENING_PLIES=20 [THREADS=8]");
         }
         int count = readPositiveNumber(args[0], "Count");
         int searchDepth = readPositiveNumber(args[1], "Depth");
@@ -60,7 +70,9 @@ public class DataCollector {
         if (minOpeningPlies > maxOpeningPlies) {
             throw new IllegalArgumentException("Minimum opening plies cannot be greater than maximum opening plies.");
         }
-        return new CollectionSettings(count, searchDepth, minOpeningPlies, maxOpeningPlies);
+        int defaultThreads = Math.max(1, Runtime.getRuntime().availableProcessors());
+        int threads = (args.length >= 5) ? readPositiveNumber(args[4], "Threads") : defaultThreads;
+        return new CollectionSettings(count, searchDepth, minOpeningPlies, maxOpeningPlies, threads);
     }
 
     private static int readPositiveNumber(String value, String label) {
@@ -93,73 +105,120 @@ public class DataCollector {
 
         Stockfish stockfish = new Stockfish(stockfishPath);
         stockfish.start();
+        stockfish.setMultiPv(MULTI_PV);
+        stockfish.setHash(64);
         return stockfish;
     }
 
-    private static int gatherPositions(Connection connection, Stockfish stockfish, CollectionSettings settings)
-            throws SQLException, IOException {
-        int gathered = 0;
-        int gameNumber = nextGameNumber(connection);
-        Random random = new Random();
+    private static int gatherPositionsParallel(Connection connection, CollectionSettings settings)
+            throws SQLException, InterruptedException {
+        int initialGameNumber = nextGameNumber(connection);
+        AtomicInteger totalGathered = new AtomicInteger(0);
+        AtomicInteger nextGameNum = new AtomicInteger(initialGameNumber);
+        Object dbLock = new Object();
 
-        while (gathered < settings.count) {
-            int remaining = settings.count - gathered;
-            int collectedInGame = gatherGame(connection, stockfish, random, gameNumber, remaining, settings);
-            gathered += collectedInGame;
-            gameNumber++;
+        ExecutorService executor = Executors.newFixedThreadPool(settings.threads);
+
+        for (int workerId = 0; workerId < settings.threads; workerId++) {
+            executor.submit(() -> {
+                try (Stockfish stockfish = startStockfish()) {
+                    Random random = new Random();
+                    while (totalGathered.get() < settings.count) {
+                        int remaining = settings.count - totalGathered.get();
+                        if (remaining <= 0) {
+                            break;
+                        }
+
+                        int gameNumber = nextGameNum.getAndIncrement();
+                        CollectedGame game = playAndAnalyzeGame(stockfish, random, gameNumber, remaining, settings);
+                        if (game == null || game.positions.isEmpty()) {
+                            continue;
+                        }
+
+                        synchronized (dbLock) {
+                            int current = totalGathered.get();
+                            if (current >= settings.count) {
+                                break;
+                            }
+                            int canSave = Math.min(game.positions.size(), settings.count - current);
+                            if (canSave > 0) {
+                                saveGame(connection, game, canSave, gameNumber, settings);
+                                int newTotal = totalGathered.addAndGet(canSave);
+                                double pct = (newTotal * 100.0) / settings.count;
+                                System.out.printf("Collected %d/%d positions (%.1f%%) [Game #%d]%n",
+                                        newTotal, settings.count, pct, gameNumber);
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    System.err.println("Worker thread error: " + e.getMessage());
+                }
+            });
         }
-        return gathered;
+
+        executor.shutdown();
+        executor.awaitTermination(24, TimeUnit.HOURS);
+        return totalGathered.get();
     }
 
-    private static int gatherGame(Connection connection, Stockfish stockfish, Random random,
-                                  int gameNumber, int remaining, CollectionSettings settings)
-            throws SQLException, IOException {
+    private static CollectedGame playAndAnalyzeGame(Stockfish stockfish, Random random,
+                                                    int gameNumber, int remaining, CollectionSettings settings)
+            throws IOException {
         Board board = new Board();
         FenCreator fenCreator = new FenCreator();
         String initialFen = fenCreator.makeFenString(board);
         List<String> gameMoves = new ArrayList<>();
+
         int requestedRandomOpeningPlies = settings.minOpeningPlies
                 + random.nextInt(settings.maxOpeningPlies - settings.minOpeningPlies + 1);
         int randomOpeningPlies = playRandomOpening(board, gameMoves, random, requestedRandomOpeningPlies);
 
+        int maximumForGame = Math.min(POSITIONS_PER_GAME, remaining);
+        List<PositionRecord> positions = new ArrayList<>();
+
+        while (positions.size() < maximumForGame && board.hasAnyLegalMove(board.getCurrentTurn())) {
+            String fen = fenCreator.makeFenString(board);
+            List<String> legalMoves = board.getAllLegalMovesUci();
+            List<StockfishAnalysis> analyses = stockfish.analysePosition(fen, settings.searchDepth, MULTI_PV);
+            if (analyses.isEmpty()) {
+                throw new IOException("Stockfish returned no analysis for " + fen);
+            }
+
+            int absolutePly = randomOpeningPlies + positions.size();
+            positions.add(new PositionRecord(absolutePly, fen, legalMoves, analyses));
+
+            String bestMove = analyses.get(0).getFirstMove();
+            if (!board.makeUciMove(bestMove)) {
+                throw new IOException("Stockfish returned an illegal move: " + bestMove);
+            }
+            gameMoves.add(bestMove);
+        }
+
+        if (positions.isEmpty()) {
+            return null;
+        }
+
+        String result = getGameResult(board);
+        String split = splitForGame(gameNumber);
+        return new CollectedGame(initialFen, randomOpeningPlies, split, gameMoves, result, positions);
+    }
+
+    private static void saveGame(Connection connection, CollectedGame game, int countToSave,
+                                 int gameNumber, CollectionSettings settings) throws SQLException {
         connection.setAutoCommit(false);
         try {
-            long gameId = insertGame(connection, initialFen, splitForGame(gameNumber), randomOpeningPlies,
-                    settings);
-            int collected = 0;
-            int maximumForGame = Math.min(POSITIONS_PER_GAME, remaining);
-
-            while (collected < maximumForGame && board.hasAnyLegalMove(board.getCurrentTurn())) {
-                String fen = fenCreator.makeFenString(board);
-                List<String> legalMoves = getLegalMoves(board);
-                List<StockfishAnalysis> analyses = stockfish.analysePosition(fen, settings.searchDepth, MULTI_PV);
-                if (analyses.isEmpty()) {
-                    throw new IOException("Stockfish returned no analysis for " + fen);
-                }
-
-                int absolutePly = randomOpeningPlies + collected;
-                insertPosition(connection, gameId, absolutePly, fen, legalMoves, analyses,
-                        splitForGame(gameNumber));
-                String bestMove = analyses.get(0).getFirstMove();
-                if (!board.makeUciMove(bestMove)) {
-                    throw new IOException("Stockfish returned an illegal move: " + bestMove);
-                }
-                gameMoves.add(bestMove);
-                collected++;
+            long gameId = insertGame(connection, game.initialFen, game.split, game.randomOpeningPlies, settings);
+            for (int i = 0; i < countToSave; i++) {
+                PositionRecord pos = game.positions.get(i);
+                insertPosition(connection, gameId, pos.ply, pos.fen, pos.legalMoves, pos.analyses, game.split);
             }
-
-            if (collected == 0) {
-                connection.rollback();
-                return 0;
-            }
-
-            updateGame(connection, gameId, gameMoves);
-            updateGameResult(connection, gameId, getGameResult(board));
+            int totalMoves = game.randomOpeningPlies + countToSave;
+            updateGame(connection, gameId, game.gameMoves.subList(0, Math.min(game.gameMoves.size(), totalMoves)));
+            updateGameResult(connection, gameId, game.gameResult);
             connection.commit();
-            return collected;
-        } catch (SQLException | IOException | RuntimeException exception) {
+        } catch (SQLException e) {
             connection.rollback();
-            throw exception;
+            throw e;
         } finally {
             connection.setAutoCommit(true);
         }
@@ -168,7 +227,7 @@ public class DataCollector {
     private static int playRandomOpening(Board board, List<String> gameMoves, Random random, int plies) {
         int played = 0;
         for (int ply = 0; ply < plies; ply++) {
-            List<String> legalMoves = getLegalMoves(board);
+            List<String> legalMoves = board.getAllLegalMovesUci();
             if (legalMoves.isEmpty()) {
                 return played;
             }
@@ -178,10 +237,6 @@ public class DataCollector {
             played++;
         }
         return played;
-    }
-
-    private static List<String> getLegalMoves(Board board) {
-        return board.getAllLegalMovesUci();
     }
 
     private static long insertGame(Connection connection, String initialFen, String split,
@@ -308,12 +363,47 @@ public class DataCollector {
         final int searchDepth;
         final int minOpeningPlies;
         final int maxOpeningPlies;
+        final int threads;
 
-        CollectionSettings(int count, int searchDepth, int minOpeningPlies, int maxOpeningPlies) {
+        CollectionSettings(int count, int searchDepth, int minOpeningPlies, int maxOpeningPlies, int threads) {
             this.count = count;
             this.searchDepth = searchDepth;
             this.minOpeningPlies = minOpeningPlies;
             this.maxOpeningPlies = maxOpeningPlies;
+            this.threads = threads;
+        }
+    }
+
+    private static class PositionRecord {
+        final int ply;
+        final String fen;
+        final List<String> legalMoves;
+        final List<StockfishAnalysis> analyses;
+
+        PositionRecord(int ply, String fen, List<String> legalMoves, List<StockfishAnalysis> analyses) {
+            this.ply = ply;
+            this.fen = fen;
+            this.legalMoves = legalMoves;
+            this.analyses = analyses;
+        }
+    }
+
+    private static class CollectedGame {
+        final String initialFen;
+        final int randomOpeningPlies;
+        final String split;
+        final List<String> gameMoves;
+        final String gameResult;
+        final List<PositionRecord> positions;
+
+        CollectedGame(String initialFen, int randomOpeningPlies, String split,
+                      List<String> gameMoves, String gameResult, List<PositionRecord> positions) {
+            this.initialFen = initialFen;
+            this.randomOpeningPlies = randomOpeningPlies;
+            this.split = split;
+            this.gameMoves = gameMoves;
+            this.gameResult = gameResult;
+            this.positions = positions;
         }
     }
 }

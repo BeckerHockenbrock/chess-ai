@@ -12,8 +12,19 @@ public final class TrainingDatabase {
 
     public static Connection open(String databasePath) throws SQLException {
         Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+        configurePragmas(connection);
         createSchema(connection);
         return connection;
+    }
+
+    public static void configurePragmas(Connection connection) throws SQLException {
+        try (Statement statement = connection.createStatement()) {
+            statement.execute("PRAGMA foreign_keys = ON");
+            statement.execute("PRAGMA journal_mode = WAL");
+            statement.execute("PRAGMA synchronous = NORMAL");
+            statement.execute("PRAGMA busy_timeout = 30000");
+            statement.execute("PRAGMA temp_store = MEMORY");
+        }
     }
 
     public static void createSchema(Connection connection) throws SQLException {

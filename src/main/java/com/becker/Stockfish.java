@@ -5,6 +5,8 @@ import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -17,12 +19,14 @@ public class Stockfish implements AutoCloseable {
     private Process process;
     private BufferedReader reader;
     private BufferedWriter writer;
+    private int currentMultiPv = 1;
+    private int currentHash = 16;
 
     public Stockfish() {
         String stockfishPath = System.getenv("STOCKFISH_PATH");
         if (stockfishPath == null || stockfishPath.isBlank()) {
-            java.nio.file.Path bundledPath = java.nio.file.Path.of("src", "main", "stockfish", "stockfish-macos-m1-apple-silicon");
-            if (java.nio.file.Files.isExecutable(bundledPath)) {
+            Path bundledPath = Path.of("src", "main", "stockfish", "stockfish-macos-m1-apple-silicon");
+            if (Files.isExecutable(bundledPath)) {
                 stockfishPath = bundledPath.toString();
             } else {
                 stockfishPath = "stockfish";
@@ -44,6 +48,30 @@ public class Stockfish implements AutoCloseable {
         readUntil("uciok");
         sendCommand("isready");
         readUntil("readyok");
+    }
+
+    public void setOption(String name, String value) throws IOException {
+        sendCommand("setoption name " + name + " value " + value);
+        sendCommand("isready");
+        readUntil("readyok");
+    }
+
+    public void setMultiPv(int multiPv) throws IOException {
+        if (currentMultiPv != multiPv) {
+            setOption("MultiPV", String.valueOf(multiPv));
+            currentMultiPv = multiPv;
+        }
+    }
+
+    public void setHash(int hashMb) throws IOException {
+        if (currentHash != hashMb) {
+            setOption("Hash", String.valueOf(hashMb));
+            currentHash = hashMb;
+        }
+    }
+
+    public void setThreads(int threads) throws IOException {
+        setOption("Threads", String.valueOf(threads));
     }
 
     public String getBestMove(String fen) throws IOException {
@@ -69,9 +97,10 @@ public class Stockfish implements AutoCloseable {
             throw new IllegalArgumentException("MultiPV must be at least 1.");
         }
 
-        sendCommand("setoption name MultiPV value " + multiPv);
-        sendCommand("isready");
-        readUntil("readyok");
+        if (currentMultiPv != multiPv) {
+            setMultiPv(multiPv);
+        }
+
         sendCommand("position fen " + fen);
         sendCommand("go depth " + depth);
 
