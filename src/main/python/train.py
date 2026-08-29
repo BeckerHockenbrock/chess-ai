@@ -56,6 +56,8 @@ def main():
     parser.add_argument("--database", default="data/training.db")
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=512)
+    parser.add_argument("--dropout", type=float, default=0.1)
+    parser.add_argument("--weight-decay", type=float, default=0.0001)
     parser.add_argument("--patience", type=int, default=3,
                         help="Stop after this many validation losses without improvement.")
     parser.add_argument("--output", default="data/chess_model.pt")
@@ -68,8 +70,8 @@ def main():
     loader_options = {"num_workers": 0, "pin_memory": device.type == "cuda"}
     train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, **loader_options)
     validation_loader = DataLoader(validation_data, batch_size=args.batch_size, **loader_options)
-    model = ChessNet().to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    model = ChessNet(dropout=args.dropout).to(device)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.001, weight_decay=args.weight_decay)
 
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
