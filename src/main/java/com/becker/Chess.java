@@ -19,7 +19,7 @@ public class Chess extends Application {
         scene = new Scene(loader.load());
         controller = loader.getController();
         stage.setScene(scene);
-        stage.setOnCloseRequest(event -> controller.closeStockfish());
+        stage.setOnCloseRequest(event -> controller.closeEngines());
         stage.sizeToScene();
         stage.show();
     }

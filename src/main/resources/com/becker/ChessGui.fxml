@@ -1,26 +1,58 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.Separator?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.GridPane?>
 <?import javafx.scene.layout.HBox?>
-<?import javafx.scene.control.Button?>
-<?import javafx.scene.control.Label?>
+<?import javafx.scene.layout.VBox?>
 
-<BorderPane fx:id="root" xmlns="http://javafx.com/javafx/8.0.171" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.becker.ChessGui">
-   <center>
-      <GridPane fx:id="boardGrid" alignment="CENTER">
-      </GridPane>
-   </center>
-   <top>
-    <Label text="Chess" BorderPane.alignment="CENTER"/>
-   </top>
-   <bottom>
-      <HBox alignment="CENTER" spacing="10">
-         <children>
-            <Label fx:id="statusLabel" text="White's turn"/>
-            <Button fx:id="stockfishButton" mnemonicParsing="false" onAction="#toggleStockfish" text="Play Stockfish"/>
-         </children>
-      </HBox>
-   </bottom>
+<BorderPane fx:id="root" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.becker.ChessGui"
+            style="-fx-background-color: #262421; -fx-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+    <top>
+        <VBox spacing="10" style="-fx-background-color: #1e1c18; -fx-padding: 12 20 12 20; -fx-border-color: #36322d; -fx-border-width: 0 0 1 0;">
+            <HBox alignment="CENTER_LEFT" spacing="12">
+                <Label text="Chess AI Arena" style="-fx-font-size: 17px; -fx-font-weight: bold; -fx-text-fill: #ffffff;"/>
+                <Separator orientation="VERTICAL"/>
+                
+                <Label text="Mode:" style="-fx-text-fill: #bababa; -fx-font-size: 13px; -fx-font-weight: bold;"/>
+                <ComboBox fx:id="modeComboBox" style="-fx-font-size: 12px; -fx-cursor: hand;"/>
 
+                <Label fx:id="humanColorLabel" text="Play As:" style="-fx-text-fill: #bababa; -fx-font-size: 13px; -fx-font-weight: bold;"/>
+                <ComboBox fx:id="humanColorComboBox" style="-fx-font-size: 12px; -fx-cursor: hand;"/>
+
+                <Label fx:id="delayLabel" text="Move Delay:" style="-fx-text-fill: #bababa; -fx-font-size: 13px; -fx-font-weight: bold;"/>
+                <ComboBox fx:id="delayComboBox" style="-fx-font-size: 12px; -fx-cursor: hand;"/>
+
+                <Button fx:id="actionButton" mnemonicParsing="false" onAction="#handleAction"
+                        style="-fx-background-color: #7fa650; -fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 13px; -fx-padding: 6 16 6 16; -fx-background-radius: 4; -fx-cursor: hand;" text="Start Match"/>
+
+                <Button fx:id="newGameButton" mnemonicParsing="false" onAction="#handleNewGame"
+                        style="-fx-background-color: #454341; -fx-text-fill: #e0e0e0; -fx-font-weight: bold; -fx-font-size: 13px; -fx-padding: 6 14 6 14; -fx-background-radius: 4; -fx-cursor: hand;" text="New Game"/>
+            </HBox>
+        </VBox>
+    </top>
+    <center>
+        <VBox alignment="CENTER" style="-fx-padding: 16;">
+            <GridPane fx:id="boardGrid" alignment="CENTER"
+                      style="-fx-border-color: #36322d; -fx-border-width: 4; -fx-background-color: #2b2824; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.6), 14, 0, 0, 6);"/>
+        </VBox>
+    </center>
+    <bottom>
+        <VBox spacing="6" style="-fx-background-color: #1e1c18; -fx-padding: 12 20 12 20; -fx-border-color: #36322d; -fx-border-width: 1 0 0 0;">
+            <HBox alignment="CENTER" spacing="24">
+                <Label fx:id="statusLabel" text="White's turn"
+                       style="-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #ffffff;"/>
+                <Separator orientation="VERTICAL"/>
+                <Label fx:id="evalLabel" text="Eval: 0.00"
+                       style="-fx-font-size: 13px; -fx-text-fill: #81b64c; -fx-font-weight: bold;"/>
+                <Separator orientation="VERTICAL"/>
+                <Label fx:id="lastMoveLabel" text="Last Move: None"
+                       style="-fx-font-size: 13px; -fx-text-fill: #cccccc;"/>
+            </HBox>
+        </VBox>
+    </bottom>
 </BorderPane>
