@@ -37,7 +37,7 @@ public class DataValidator {
     }
 
     private static Path getDatabasePath() {
-        String configuredPath = System.getenv("TRAINING_DATABASE_PATH");
+        String configuredPath = System.getProperty("training.database.path", System.getenv("TRAINING_DATABASE_PATH"));
         if (configuredPath == null || configuredPath.isBlank()) {
             return Path.of("data", "training.db");
         }

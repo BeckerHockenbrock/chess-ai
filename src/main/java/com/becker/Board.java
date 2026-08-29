@@ -369,6 +369,47 @@ public class Board {
         return false;
     }
 
+    public void reset() {
+        grid = new Piece[8][8];
+        placePeices();
+        currentTurn = Piece.WHITE;
+        halfmoveClock = 0;
+        fullmoveNumber = 1;
+        whiteCanCastleKingside = true;
+        whiteCanCastleQueenside = true;
+        blackCanCastleKingside = true;
+        blackCanCastleQueenside = true;
+        enPassantTarget = null;
+    }
+
+    public List<String> getAllLegalMovesUci() {
+        List<String> moves = new ArrayList<>();
+        for (int row = 0; row < 8; row++) {
+            for (int col = 0; col < 8; col++) {
+                Piece piece = grid[row][col];
+                if (piece == null || piece.getColor() != currentTurn) {
+                    continue;
+                }
+                for (int[] destination : getLegalMoves(row, col)) {
+                    String move = toSquare(row, col) + toSquare(destination[0], destination[1]);
+                    if (piece instanceof Pawn && (destination[0] == 0 || destination[0] == 7)) {
+                        moves.add(move + "q");
+                        moves.add(move + "r");
+                        moves.add(move + "b");
+                        moves.add(move + "n");
+                    } else {
+                        moves.add(move);
+                    }
+                }
+            }
+        }
+        return moves;
+    }
+
+    private static String toSquare(int row, int col) {
+        return "" + (char) ('a' + col) + (8 - row);
+    }
+
     public boolean isCheckmate(int color) {
         return isInCheck(color) && !hasAnyLegalMove(color);
     }
