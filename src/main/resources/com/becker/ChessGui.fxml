@@ -21,6 +21,11 @@
                 <Label text="Mode:" style="-fx-text-fill: #bababa; -fx-font-size: 13px; -fx-font-weight: bold;"/>
                 <ComboBox fx:id="modeComboBox" style="-fx-font-size: 12px; -fx-cursor: hand;"/>
 
+                <Label fx:id="modelLabel" text="Model:" style="-fx-text-fill: #bababa; -fx-font-size: 13px; -fx-font-weight: bold;"/>
+                <ComboBox fx:id="modelComboBox" style="-fx-font-size: 12px; -fx-cursor: hand; -fx-pref-width: 180;"/>
+                <Button fx:id="browseModelButton" mnemonicParsing="false" onAction="#handleBrowseModel"
+                        style="-fx-background-color: #454341; -fx-text-fill: #e0e0e0; -fx-font-size: 12px; -fx-padding: 5 10 5 10; -fx-background-radius: 4; -fx-cursor: hand;" text="Browse..."/>
+
                 <Label fx:id="humanColorLabel" text="Play As:" style="-fx-text-fill: #bababa; -fx-font-size: 13px; -fx-font-weight: bold;"/>
                 <ComboBox fx:id="humanColorComboBox" style="-fx-font-size: 12px; -fx-cursor: hand;"/>
 

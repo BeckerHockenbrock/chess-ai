@@ -1,9 +1,13 @@
 package com.becker;
 
+import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.stream.Stream;
 
 import com.becker.pieces.Bishop;
 import com.becker.pieces.King;
@@ -32,6 +36,7 @@ import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.stage.FileChooser;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 
@@ -47,6 +52,12 @@ public class ChessGui {
     private GridPane boardGrid;
     @FXML
     private ComboBox<String> modeComboBox;
+    @FXML
+    private Label modelLabel;
+    @FXML
+    private ComboBox<String> modelComboBox;
+    @FXML
+    private Button browseModelButton;
     @FXML
     private Label humanColorLabel;
     @FXML
@@ -70,6 +81,7 @@ public class ChessGui {
     private final FenCreator fenCreator = new FenCreator();
     private Stockfish stockfish;
     private ChessModel chessModel;
+    private String currentModelPath = null;
 
     private List<int[]> highlightedMoves = new ArrayList<>();
     private int selectedRow = -1;
@@ -98,6 +110,8 @@ public class ChessGui {
         );
         modeComboBox.setValue(MODE_PLAY_MODEL);
 
+        populateModelList();
+
         humanColorComboBox.getItems().addAll("White", "Black");
         humanColorComboBox.setValue("White");
 
@@ -112,15 +126,105 @@ public class ChessGui {
         delayComboBox.setValue("2.0s (Default)");
 
         modeComboBox.valueProperty().addListener((obs, oldVal, newVal) -> onModeChanged(newVal));
+        modelComboBox.valueProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null && !newVal.equals(oldVal)) {
+                reloadModelEngine();
+            }
+        });
         humanColorComboBox.valueProperty().addListener((obs, oldVal, newVal) -> handleNewGame());
         
         onModeChanged(modeComboBox.getValue());
+    }
+
+    private void populateModelList() {
+        modelComboBox.getItems().clear();
+        Path dataDir = Path.of("data");
+        if (Files.exists(dataDir) && Files.isDirectory(dataDir)) {
+            try (Stream<Path> stream = Files.list(dataDir)) {
+                stream.filter(p -> p.toString().endsWith(".pt"))
+                        .forEach(p -> modelComboBox.getItems().add(p.getFileName().toString()));
+            } catch (IOException ignored) {
+            }
+        }
+        if (modelComboBox.getItems().isEmpty()) {
+            modelComboBox.getItems().add("chess_model.pt");
+        }
+        if (modelComboBox.getItems().contains("chess_model.pt")) {
+            modelComboBox.setValue("chess_model.pt");
+        } else {
+            modelComboBox.setValue(modelComboBox.getItems().get(0));
+        }
+    }
+
+    @FXML
+    public void handleBrowseModel() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Select Chess Model File");
+        fileChooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("PyTorch Model (*.pt)", "*.pt")
+        );
+        File initialDir = new File("data");
+        if (initialDir.exists() && initialDir.isDirectory()) {
+            fileChooser.setInitialDirectory(initialDir);
+        }
+        Stage stage = null;
+        if (boardGrid != null && boardGrid.getScene() != null) {
+            stage = (Stage) boardGrid.getScene().getWindow();
+        }
+        File selectedFile = fileChooser.showOpenDialog(stage);
+        if (selectedFile != null) {
+            String path = selectedFile.getAbsolutePath();
+            String displayName = selectedFile.getName();
+            if (!modelComboBox.getItems().contains(displayName) && !modelComboBox.getItems().contains(path)) {
+                modelComboBox.getItems().add(path);
+            }
+            modelComboBox.setValue(modelComboBox.getItems().contains(displayName) ? displayName : path);
+            reloadModelEngine();
+        }
+    }
+
+    private String getSelectedModelPath() {
+        String selected = modelComboBox != null ? modelComboBox.getValue() : null;
+        if (selected == null || selected.isBlank()) {
+            return "data/chess_model.pt";
+        }
+        Path direct = Path.of(selected);
+        if (Files.exists(direct)) {
+            return direct.toString();
+        }
+        Path inData = Path.of("data", selected);
+        if (Files.exists(inData)) {
+            return inData.toString();
+        }
+        return selected;
+    }
+
+    private synchronized void reloadModelEngine() {
+        if (chessModel != null) {
+            chessModel.close();
+            chessModel = null;
+        }
+        currentModelPath = getSelectedModelPath();
     }
 
     private void onModeChanged(String mode) {
         stopAiMatch();
         boolean isWatchMode = isWatchMode(mode);
         boolean isHumanVsAi = isHumanVsAi(mode);
+        boolean usesModel = usesModel(mode);
+
+        if (modelLabel != null) {
+            modelLabel.setVisible(usesModel);
+            modelLabel.setManaged(usesModel);
+        }
+        if (modelComboBox != null) {
+            modelComboBox.setVisible(usesModel);
+            modelComboBox.setManaged(usesModel);
+        }
+        if (browseModelButton != null) {
+            browseModelButton.setVisible(usesModel);
+            browseModelButton.setManaged(usesModel);
+        }
 
         humanColorLabel.setVisible(isHumanVsAi);
         humanColorLabel.setManaged(isHumanVsAi);
@@ -146,6 +250,10 @@ public class ChessGui {
 
     private boolean isHumanVsAi(String mode) {
         return MODE_PLAY_MODEL.equals(mode) || MODE_PLAY_STOCKFISH.equals(mode);
+    }
+
+    private boolean usesModel(String mode) {
+        return MODE_PLAY_MODEL.equals(mode) || MODE_WATCH_SF_VS_MODEL.equals(mode) || MODE_WATCH_MODEL_VS_SF.equals(mode);
     }
 
     private int getSelectedDelayMs() {
@@ -607,8 +715,13 @@ public class ChessGui {
     }
 
     private synchronized ChessModel getModelEngine() throws IOException {
-        if (chessModel == null || !chessModel.isAlive()) {
-            chessModel = new ChessModel();
+        String modelPath = getSelectedModelPath();
+        if (chessModel == null || !chessModel.isAlive() || !modelPath.equals(currentModelPath)) {
+            if (chessModel != null) {
+                chessModel.close();
+            }
+            currentModelPath = modelPath;
+            chessModel = new ChessModel(ChessModel.findPythonExecutable(), modelPath);
             chessModel.start();
         }
         return chessModel;
