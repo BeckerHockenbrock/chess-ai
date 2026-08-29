@@ -18,6 +18,12 @@ MODEL ?= data/chess_model.pt
 DEPTH ?= 4
 MIN_OPENING_PLIES ?= 4
 MAX_OPENING_PLIES ?= 8
+EPOCHS ?= 30
+BATCH_SIZE ?= 512
+LR ?= 0.001
+BLOCKS ?= 6
+CHANNELS ?= 128
+PATIENCE ?= 6
 
 build:
 	mvn compile
@@ -44,7 +50,7 @@ test: test-python
 	mvn test
 
 train:
-	$(RUN_PYTHON) src/main/python/train.py --database "$(DATABASE)" --output "$(MODEL)"
+	$(RUN_PYTHON) src/main/python/train.py --database "$(DATABASE)" --output "$(MODEL)" --epochs $(EPOCHS) --batch-size $(BATCH_SIZE) --lr $(LR) --blocks $(BLOCKS) --channels $(CHANNELS) --patience $(PATIENCE)
 
 $(filter-out all build run clean gather validate-data test-python test train,$(MAKECMDGOALS)):
 	@:

@@ -59,6 +59,10 @@ public class ChessGui {
     @FXML
     private Button browseModelButton;
     @FXML
+    private Label searchDepthLabel;
+    @FXML
+    private ComboBox<String> searchDepthComboBox;
+    @FXML
     private Label humanColorLabel;
     @FXML
     private ComboBox<String> humanColorComboBox;
@@ -79,6 +83,7 @@ public class ChessGui {
 
     private final Board board = new Board();
     private final FenCreator fenCreator = new FenCreator();
+    private final ChessSearcher searcher = new ChessSearcher();
     private Stockfish stockfish;
     private ChessModel chessModel;
     private String currentModelPath = null;
@@ -111,6 +116,14 @@ public class ChessGui {
         modeComboBox.setValue(MODE_PLAY_MODEL);
 
         populateModelList();
+
+        searchDepthComboBox.getItems().addAll(
+                "1-ply (Instant)",
+                "2-ply (Fast)",
+                "3-ply (Recommended)",
+                "4-ply (Deep)"
+        );
+        searchDepthComboBox.setValue("3-ply (Recommended)");
 
         humanColorComboBox.getItems().addAll("White", "Black");
         humanColorComboBox.setValue("White");
@@ -225,6 +238,14 @@ public class ChessGui {
             browseModelButton.setVisible(usesModel);
             browseModelButton.setManaged(usesModel);
         }
+        if (searchDepthLabel != null) {
+            searchDepthLabel.setVisible(usesModel);
+            searchDepthLabel.setManaged(usesModel);
+        }
+        if (searchDepthComboBox != null) {
+            searchDepthComboBox.setVisible(usesModel);
+            searchDepthComboBox.setManaged(usesModel);
+        }
 
         humanColorLabel.setVisible(isHumanVsAi);
         humanColorLabel.setManaged(isHumanVsAi);
@@ -254,6 +275,16 @@ public class ChessGui {
 
     private boolean usesModel(String mode) {
         return MODE_PLAY_MODEL.equals(mode) || MODE_WATCH_SF_VS_MODEL.equals(mode) || MODE_WATCH_MODEL_VS_SF.equals(mode);
+    }
+
+    private int getSelectedSearchDepth() {
+        String val = searchDepthComboBox != null ? searchDepthComboBox.getValue() : null;
+        if (val == null) return 3;
+        if (val.startsWith("1")) return 1;
+        if (val.startsWith("2")) return 2;
+        if (val.startsWith("3")) return 3;
+        if (val.startsWith("4")) return 4;
+        return 3;
     }
 
     private int getSelectedDelayMs() {
@@ -372,10 +403,11 @@ public class ChessGui {
                     evalText = "Stockfish move";
                 } else {
                     ChessModel model = getModelEngine();
-                    List<String> legalMoves = board.getAllLegalMovesUci();
-                    ModelPrediction pred = model.predict(fen, legalMoves);
-                    uciMove = pred.getBestMove();
-                    evalText = String.format("Model Eval: %+.2f", pred.getValue());
+                    int depth = getSelectedSearchDepth();
+                    ChessSearcher.SearchResult searchResult = searcher.search(board, model, depth);
+                    uciMove = searchResult.getBestMove();
+                    evalText = String.format("Model Eval: %+.2f (d=%d, %d nodes)",
+                            searchResult.getScore(), searchResult.getDepth(), searchResult.getNodes());
                 }
             } catch (Exception e) {
                 final String errorMsg = e.getMessage();
@@ -462,9 +494,11 @@ public class ChessGui {
                     return new AiMoveResult(move, "Stockfish move");
                 } else {
                     ChessModel model = getModelEngine();
-                    ModelPrediction pred = model.predict(fen, legalMoves);
-                    String eval = String.format("Model Eval: %+.2f", pred.getValue());
-                    return new AiMoveResult(pred.getBestMove(), eval);
+                    int depth = getSelectedSearchDepth();
+                    ChessSearcher.SearchResult searchResult = searcher.search(board, model, depth);
+                    String eval = String.format("Model Eval: %+.2f (d=%d, %d nodes)",
+                            searchResult.getScore(), searchResult.getDepth(), searchResult.getNodes());
+                    return new AiMoveResult(searchResult.getBestMove(), eval);
                 }
             }
         };

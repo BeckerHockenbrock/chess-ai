@@ -417,4 +417,40 @@ public class Board {
     public boolean isStalemate(int color) {
         return !isInCheck(color) && !hasAnyLegalMove(color);
     }
+
+    public Board copy() {
+        Board clone = new Board();
+        clone.grid = new Piece[8][8];
+        for (int r = 0; r < 8; r++) {
+            for (int c = 0; c < 8; c++) {
+                Piece p = this.grid[r][c];
+                if (p != null) {
+                    Piece cp;
+                    if (p instanceof Pawn) cp = new Pawn(p.getColor());
+                    else if (p instanceof Knight) cp = new Knight(p.getColor());
+                    else if (p instanceof Bishop) cp = new Bishop(p.getColor());
+                    else if (p instanceof Rook) {
+                        cp = new Rook(p.getColor());
+                        if (((Rook) p).getHasMoved()) ((Rook) cp).setMoved();
+                    }
+                    else if (p instanceof Queen) cp = new Queen(p.getColor());
+                    else if (p instanceof King) {
+                        cp = new King(p.getColor());
+                        if (((King) p).getHasMoved()) ((King) cp).setMoved();
+                    }
+                    else cp = null;
+                    clone.grid[r][c] = cp;
+                }
+            }
+        }
+        clone.currentTurn = this.currentTurn;
+        clone.halfmoveClock = this.halfmoveClock;
+        clone.fullmoveNumber = this.fullmoveNumber;
+        clone.whiteCanCastleKingside = this.whiteCanCastleKingside;
+        clone.whiteCanCastleQueenside = this.whiteCanCastleQueenside;
+        clone.blackCanCastleKingside = this.blackCanCastleKingside;
+        clone.blackCanCastleQueenside = this.blackCanCastleQueenside;
+        clone.enPassantTarget = this.enPassantTarget != null ? new int[]{this.enPassantTarget[0], this.enPassantTarget[1]} : null;
+        return clone;
+    }
 }

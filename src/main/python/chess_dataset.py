@@ -1,4 +1,4 @@
-"""Turns the collected chess positions into PyTorch training examples."""
+"""Turns the collected chess positions into PyTorch training examples with data augmentation."""
 
 import json
 import math
@@ -26,9 +26,10 @@ KNIGHT_DIRECTIONS = (
 
 
 class ChessDataset(Dataset):
-    """A small in-memory Dataset for the project's SQLite training database."""
+    """An in-memory Dataset with optional horizontal mirroring data augmentation."""
 
-    def __init__(self, database_path, split):
+    def __init__(self, database_path, split, augment=False):
+        self.augment = augment and (split == "train")
         with sqlite3.connect(database_path) as connection:
             self.rows = connection.execute(
                 "SELECT fen, legal_moves_json, teacher_policy_json, value_cp, value_mate "
@@ -38,18 +39,101 @@ class ChessDataset(Dataset):
             raise ValueError("No positions found for split: " + split)
 
     def __len__(self):
-        return len(self.rows)
+        # When augmented, dataset size doubles (original + horizontally mirrored)
+        return len(self.rows) * 2 if self.augment else len(self.rows)
 
     def __getitem__(self, index):
-        fen, legal_json, teacher_json, value_cp, value_mate = self.rows[index]
+        is_mirrored = False
+        if self.augment:
+            is_mirrored = (index >= len(self.rows))
+            row_idx = index % len(self.rows)
+        else:
+            row_idx = index
+
+        fen, legal_json, teacher_json, value_cp, value_mate = self.rows[row_idx]
         legal_moves = json.loads(legal_json)
         teacher_moves = json.loads(teacher_json)
+
+        if is_mirrored:
+            fen = mirror_fen(fen)
+            legal_moves = [mirror_move_uci(m) for m in legal_moves]
+            teacher_moves = [
+                {"move": mirror_move_uci(t["move"]), "scoreCp": t.get("scoreCp"), "scoreMate": t.get("scoreMate")}
+                for t in teacher_moves
+            ]
+
         return {
             "board": fen_to_tensor(fen),
             "legal_mask": legal_moves_to_mask(legal_moves),
             "policy": teacher_policy_to_tensor(teacher_moves),
             "value": torch.tensor(score_to_value(value_cp, value_mate), dtype=torch.float32),
         }
+
+
+def mirror_move_uci(move):
+    """Mirror a UCI move horizontally (a <-> h, b <-> g, c <-> f, d <-> e)."""
+    from_file = chr(ord('a') + (7 - (ord(move[0]) - ord('a'))))
+    from_rank = move[1]
+    to_file = chr(ord('a') + (7 - (ord(move[2]) - ord('a'))))
+    to_rank = move[3]
+    promo = move[4:] if len(move) > 4 else ""
+    return f"{from_file}{from_rank}{to_file}{to_rank}{promo}"
+
+
+def mirror_fen(fen):
+    """Mirror a FEN horizontally."""
+    board, turn, castling, en_passant, *rest = fen.split()
+
+    # Mirror piece grid row by row
+    mirrored_rows = []
+    for rank in board.split("/"):
+        expanded = []
+        for ch in rank:
+            if ch.isdigit():
+                expanded.extend(["."] * int(ch))
+            else:
+                expanded.append(ch)
+        expanded.reverse()
+
+        comp = []
+        count = 0
+        for ch in expanded:
+            if ch == ".":
+                count += 1
+            else:
+                if count > 0:
+                    comp.append(str(count))
+                    count = 0
+                comp.append(ch)
+        if count > 0:
+            comp.append(str(count))
+        mirrored_rows.append("".join(comp))
+
+    mirrored_board = "/".join(mirrored_rows)
+
+    # Mirror castling rights (K <-> Q, k <-> q)
+    mirrored_castling = ""
+    if "Q" in castling:
+        mirrored_castling += "K"
+    if "K" in castling:
+        mirrored_castling += "Q"
+    if "q" in castling:
+        mirrored_castling += "k"
+    if "k" in castling:
+        mirrored_castling += "q"
+    if not mirrored_castling:
+        mirrored_castling = "-"
+
+    # Mirror en passant target square
+    if en_passant != "-":
+        ep_file = chr(ord('a') + (7 - (ord(en_passant[0]) - ord('a'))))
+        ep_rank = en_passant[1]
+        mirrored_ep = f"{ep_file}{ep_rank}"
+    else:
+        mirrored_ep = "-"
+
+    suffix = " ".join(rest) if rest else "0 1"
+    return f"{mirrored_board} {turn} {mirrored_castling} {mirrored_ep} {suffix}"
 
 
 def fen_to_tensor(fen):
@@ -98,9 +182,9 @@ def teacher_policy_to_tensor(analyses, temperature=100.0):
 
 
 def analysis_score(analysis):
-    if analysis["scoreMate"] is not None:
+    if analysis.get("scoreMate") is not None:
         return 10000 if analysis["scoreMate"] > 0 else -10000
-    return analysis["scoreCp"]
+    return analysis.get("scoreCp", 0)
 
 
 def score_to_value(score_cp, score_mate):

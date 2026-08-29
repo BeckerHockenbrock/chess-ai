@@ -28,15 +28,21 @@ class ModelService:
             raise FileNotFoundError(f"Model file not found: {self.model_path}")
 
         self.device = get_device(device_name)
-        self.model = ChessNet().to(self.device)
-
         checkpoint = torch.load(self.model_path, map_location=self.device)
         if isinstance(checkpoint, dict) and "model_state" in checkpoint:
-            self.model.load_state_dict(checkpoint["model_state"])
+            blocks = checkpoint.get("num_blocks", 6)
+            channels = checkpoint.get("channels", 128)
+            try:
+                self.model = ChessNet(num_blocks=blocks, channels=channels).to(self.device)
+                self.model.load_state_dict(checkpoint["model_state"])
+            except Exception:
+                self.model = ChessNet().to(self.device)
+                self.model.load_state_dict(checkpoint["model_state"], strict=False)
             self.epoch = checkpoint.get("epoch", "?")
             self.val_loss = checkpoint.get("validation_loss", "?")
         else:
-            self.model.load_state_dict(checkpoint)
+            self.model = ChessNet().to(self.device)
+            self.model.load_state_dict(checkpoint, strict=False)
             self.epoch = "?"
             self.val_loss = "?"
 

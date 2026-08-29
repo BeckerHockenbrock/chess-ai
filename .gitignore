@@ -21,6 +21,6 @@ data/*.db-wal
 data/*.pt
 
 # Python cache
-    __pycache__/
-    *.py[cod]
-    *$py.class
+__pycache__/
+*.py[cod]
+*$py.class
